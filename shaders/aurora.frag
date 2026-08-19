@@ -8,54 +8,40 @@
 layout(location = 0) in vec2 qt_TexCoord0;   // y = 0 at top
 layout(location = 0) out vec4 fragColor;
 
+// NO const arrays anywhere: the shell's OpenGL RHI translates this to old
+// GLSL targets where constant-array initializers do not exist (runtime
+// "C7516: OpenGL does not allow constant arrays" with a blank overlay,
+// while qsb itself compiles clean). The palette arrives as six vec4
+// uniforms (rgb + stop position in w) computed in QML — portable, and
+// palette switching is live.
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     float time;
     vec2 resolution;
-    float paletteIndex;   // 0 aurora, 1 ember, 2 gold, 3 nord, 4 ice
+    vec4 stop0;
+    vec4 stop1;
+    vec4 stop2;
+    vec4 stop3;
+    vec4 stop4;
+    vec4 stop5;
+    vec4 skyBase;   // rgb used
+    vec4 skyAmp;    // rgb used
 };
 
 const float WATERLINE = 0.82;
 
-// 6-stop ramps per palette (flattened [pal*6+i]), from play/aurora.py PALETTES
-const float RP[30] = float[30](
-  0.00, 0.12, 0.30, 0.55, 0.80, 1.00,
-  0.00, 0.15, 0.35, 0.60, 0.82, 1.00,
-  0.00, 0.15, 0.35, 0.60, 0.82, 1.00,
-  0.00, 0.18, 0.40, 0.62, 0.82, 1.00,
-  0.00, 0.15, 0.35, 0.60, 0.82, 1.00);
-const vec3 RC[30] = vec3[30](
-  vec3(150., 45.,180.)/255., vec3( 90.,110.,205.)/255., vec3( 35.,200.,200.)/255.,
-  vec3( 30.,235.,130.)/255., vec3( 25.,180., 80.)/255., vec3(  8., 70., 35.)/255.,
-  vec3(200., 40.,150.)/255., vec3(225., 60., 95.)/255., vec3(235., 75., 60.)/255.,
-  vec3(240.,120., 40.)/255., vec3(180., 70., 22.)/255., vec3( 60., 20., 12.)/255.,
-  vec3(120., 70., 20.)/255., vec3(180.,120., 35.)/255., vec3(225.,165., 55.)/255.,
-  vec3(245.,205.,110.)/255., vec3(235.,175., 90.)/255., vec3( 60., 40., 14.)/255.,
-  vec3(180.,142.,173.)/255., vec3(129.,161.,193.)/255., vec3(136.,192.,208.)/255.,
-  vec3(143.,188.,187.)/255., vec3(163.,190.,140.)/255., vec3( 90.,110., 75.)/255.,
-  vec3( 60., 90.,200.)/255., vec3( 60.,150.,230.)/255., vec3( 90.,210.,235.)/255.,
-  vec3(160.,235.,240.)/255., vec3(130.,185.,160.)/255., vec3( 20., 45., 75.)/255.);
-const vec3 SKYB[5] = vec3[5](
-  vec3( 6., 8.,18.)/255., vec3(10., 6.,12.)/255., vec3(10., 8., 6.)/255.,
-  vec3(12.,14.,18.)/255., vec3( 6., 9.,22.)/255.);
-const vec3 SKYA[5] = vec3[5](
-  vec3( 8.,10.,22.)/255., vec3(16., 8.,14.)/255., vec3(16.,12., 8.)/255.,
-  vec3(20.,24.,34.)/255., vec3( 8.,14.,26.)/255.);
-
-int pal() { return int(clamp(paletteIndex, 0.0, 4.0) + 0.5); }
-
-// piecewise-linear ramp, aurora.py ramp()/np.interp (clamped both ends)
+// piecewise-linear ramp, aurora.py ramp()/np.interp — chained clamped mixes
+// reproduce the 6-stop interp exactly (each clamp saturates before the next
+// segment starts)
 vec3 ramp(float p) {
-  int b = pal() * 6;
-  if (p <= RP[b]) return RC[b];
-  for (int i = 1; i < 6; i++) {
-    if (p <= RP[b + i]) {
-      float f = (p - RP[b + i - 1]) / (RP[b + i] - RP[b + i - 1]);
-      return mix(RC[b + i - 1], RC[b + i], f);
-    }
-  }
-  return RC[b + 5];
+  vec3 c = stop0.rgb;
+  c = mix(c, stop1.rgb, clamp((p - stop0.w) / (stop1.w - stop0.w), 0.0, 1.0));
+  c = mix(c, stop2.rgb, clamp((p - stop1.w) / (stop2.w - stop1.w), 0.0, 1.0));
+  c = mix(c, stop3.rgb, clamp((p - stop2.w) / (stop3.w - stop2.w), 0.0, 1.0));
+  c = mix(c, stop4.rgb, clamp((p - stop3.w) / (stop4.w - stop3.w), 0.0, 1.0));
+  c = mix(c, stop5.rgb, clamp((p - stop4.w) / (stop5.w - stop4.w), 0.0, 1.0));
+  return c;
 }
 
 float hash21(vec2 p) {
@@ -135,10 +121,9 @@ vec3 meteors(vec2 uv, float t, float aspect) {
 // Everything above the waterline; the water mirrors this whole stack.
 vec3 upperScene(vec2 uv, float t) {
   float aspect = resolution.x / resolution.y;
-  int P = pal();
 
   // sky gradient
-  vec3 col = SKYB[P] + SKYA[P] * (1.0 - uv.y);
+  vec3 col = skyBase.rgb + skyAmp.rgb * (1.0 - uv.y);
 
   // starfield (hash gather; ~14px cells, kept above 0.7 height)
   if (uv.y < 0.7) {
