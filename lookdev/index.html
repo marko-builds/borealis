@@ -23,10 +23,14 @@
   canvas { width: 100vw; height: 100vh; display: block; }
   #hud { position: fixed; left: 12px; bottom: 10px; color: #9ab;
          font: 12px monospace; opacity: 0.7; user-select: none; }
+  #clock { position: fixed; right: 28px; top: 20px; color: rgba(225, 238, 255, 0.55);
+           font: 300 44px monospace; letter-spacing: 0.06em; user-select: none;
+           display: none; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="clock"></div>
 <div id="hud"></div>
 
 <script id="frag" type="x-shader/fragment">#version 300 es
@@ -39,6 +43,10 @@ uniform float rampP[6];
 uniform vec3  rampC[6];
 uniform vec3  skyBase;
 uniform vec3  skyAmp;
+// extras toggles (0/1): crescent moon, satellite, water reflection
+uniform float uMoon;
+uniform float uSat;
+uniform float uWater;
 
 out vec4 fragColor;
 
@@ -94,7 +102,10 @@ vec3 curtain(vec2 uv, float t,
   return ramp(rel) * b * alpha;
 }
 
-vec4 scene(vec2 uv, float t) {
+// Everything above the waterline; water mirrors this whole stack.
+vec3 upperScene(vec2 uv, float t) {
+  float aspect = resolution.x / resolution.y;
+
   // sky gradient: base + amp*(1 - vert), vert = y/H                  (l. 145-150)
   vec3 col = skyBase + skyAmp * (1.0 - uv.y);
 
@@ -113,6 +124,37 @@ vec4 scene(vec2 uv, float t) {
       float star = smoothstep(1.2, 0.0, d) * mag * twk * 0.78;
       col += star * vec3(0.85, 0.9, 1.0);
     }
+  }
+
+  // extra: crescent moon — pale disc minus an offset disc, soft halo.
+  // Drawn after stars so its body occludes them; aurora stays in front
+  // (the curtains are nearer atmosphere).
+  if (uMoon > 0.5) {
+    vec2 mc = vec2(0.78, 0.16);
+    vec2 mp = (uv - mc) * vec2(aspect, 1.0);
+    float r = 0.055;
+    float d1 = length(mp);
+    float d2 = length(mp - vec2(0.020, -0.009));
+    float disc = smoothstep(r, r - 0.004, d1);
+    float cut  = smoothstep(r * 1.04, r * 1.04 - 0.004, d2);
+    float crescent = clamp(disc - cut, 0.0, 1.0);
+    vec3 moonCol = vec3(0.95, 0.93, 0.85);
+    col = mix(col, moonCol, crescent);
+    col += moonCol * exp(-d1 * 34.0) * 0.10;   // gentle halo
+  }
+
+  // extra: satellite — a tiny steady spark crossing the sky, new pass
+  // every 40s at a hashed height. Reads as a slow-moving star.
+  if (uSat > 0.5) {
+    float period = 40.0;
+    float ph = fract(t / period);
+    float cyc = floor(t / period);
+    float h = fract(sin(cyc * 12.9898) * 43758.5453);
+    vec2 sp = vec2(mix(-0.03, 1.03, ph),
+                   0.10 + 0.26 * h + 0.05 * sin(ph * 3.14159));
+    float d = length((uv - sp) * vec2(aspect, 1.0));
+    float dot_ = smoothstep(0.0032, 0.0, d);
+    col += dot_ * vec3(1.0, 0.98, 0.92) * 0.85;
   }
 
   // three curtain layers, aurora.py self.layers                      (l. 134-139)
@@ -136,7 +178,29 @@ vec4 scene(vec2 uv, float t) {
   float ridgeTop = 1.0 - ridge * 0.16;
   if (uv.y >= ridgeTop) col = vec3(5.0, 6.0, 11.0) / 255.0;
 
-  return vec4(clamp(col, 0.0, 1.0), 1.0);
+  return col;
+}
+
+vec4 scene(vec2 uv, float t) {
+  // extra: water — the band below the waterline mirrors the upper scene,
+  // stretched (K) so the reflection reaches the curtains rather than only
+  // the dark shore, wobbled by depth, darkened and cooled.
+  float waterline = 0.90;
+  if (uWater > 0.5 && uv.y >= waterline) {
+    float depth = (uv.y - waterline) / (1.0 - waterline);   // 0 shore -> 1 bottom
+    float K = 3.2;
+    vec2 ruv = vec2(uv.x, waterline - (uv.y - waterline) * K);
+    ruv.x += (0.0025 + 0.006 * depth)
+             * sin(uv.y * 90.0 + t * 1.4)
+             * sin(uv.y * 23.0 - t * 0.9);
+    ruv = clamp(ruv, 0.0, 1.0);
+    vec3 refl = upperScene(ruv, t);
+    vec3 water = refl * (0.68 - 0.32 * depth) + vec3(0.010, 0.018, 0.038);
+    // faint bright seam right at the shoreline
+    water += vec3(0.05, 0.08, 0.10) * smoothstep(0.015, 0.0, uv.y - waterline);
+    return vec4(clamp(water, 0.0, 1.0), 1.0);
+  }
+  return vec4(clamp(upperScene(uv, t), 0.0, 1.0), 1.0);
 }
 
 void main() {
@@ -196,8 +260,27 @@ gl.useProgram(prog);
 
 const U = n => gl.getUniformLocation(prog, n);
 
-let palette = new URLSearchParams(location.search).get("palette") || "aurora";
+const params = new URLSearchParams(location.search);
+let palette = params.get("palette") || "aurora";
 if (!PALETTES[palette]) palette = "aurora";
+
+// extras toggles: keys m / s / w / c, or ?moon=1&sat=1&water=1&clock=1
+const toggles = {
+  moon:  params.get("moon")  === "1",
+  sat:   params.get("sat")   === "1",
+  water: params.get("water") === "1",
+  clock: params.get("clock") === "1",
+};
+
+function pushState() {
+  gl.uniform1f(U("uMoon"),  toggles.moon  ? 1 : 0);
+  gl.uniform1f(U("uSat"),   toggles.sat   ? 1 : 0);
+  gl.uniform1f(U("uWater"), toggles.water ? 1 : 0);
+  document.getElementById("clock").style.display = toggles.clock ? "block" : "none";
+  const on = Object.keys(toggles).filter(k => toggles[k]).join("+") || "none";
+  hud.textContent = `borealis look-dev — palette: ${palette} (1-5) — extras: ${on} `
+    + `(m oon, s atellite, w ater, c lock)`;
+}
 
 function setPalette(name) {
   palette = name;
@@ -206,14 +289,23 @@ function setPalette(name) {
   gl.uniform3fv(U("rampC"), P.c.flat().map(v => v / 255));
   gl.uniform3f(U("skyBase"), ...P.skyBase.map(v => v / 255));
   gl.uniform3f(U("skyAmp"), ...P.skyAmp.map(v => v / 255));
-  hud.textContent = `borealis look-dev — palette: ${name} (keys 1-5: ${NAMES.join(", ")})`;
+  pushState();
 }
 setPalette(palette);
 
 addEventListener("keydown", e => {
   const i = "12345".indexOf(e.key);
-  if (i >= 0) setPalette(NAMES[i]);
+  if (i >= 0) return setPalette(NAMES[i]);
+  const map = { m: "moon", s: "sat", w: "water", c: "clock" };
+  if (map[e.key]) { toggles[map[e.key]] = !toggles[map[e.key]]; pushState(); }
 });
+
+// corner clock (HTML here; QML Text in the port, per the PRD)
+setInterval(() => {
+  const d = new Date();
+  document.getElementById("clock").textContent =
+    String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}, 1000);
 
 function resize() {
   canvas.width = innerWidth * devicePixelRatio;
