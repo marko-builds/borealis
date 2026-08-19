@@ -9,6 +9,14 @@ Item {
   property var manifest: null
   property bool opened: false
 
+  // The single config surface: palette by name, via env or edit here.
+  // BOREALIS_PALETTE = aurora | ember | gold | nord | ice
+  readonly property var paletteNames: ["aurora", "ember", "gold", "nord", "ice"]
+  property string palette: {
+    var p = Quickshell.env("BOREALIS_PALETTE")
+    return paletteNames.indexOf(p) >= 0 ? p : "aurora"
+  }
+
   function open(payloadJson) {
     root.opened = true
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -43,6 +51,8 @@ Item {
       id: scene
       anchors.fill: parent
       property real time: 0
+      property vector2d resolution: Qt.vector2d(width, height)
+      property real paletteIndex: root.paletteNames.indexOf(root.palette)
       fragmentShader: Qt.resolvedUrl("shaders/aurora.frag.qsb")
 
       // All animation gated on the overlay being open: zero work while dismissed.
