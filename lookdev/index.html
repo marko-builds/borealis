@@ -73,6 +73,12 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
+// breaks 8-bit banding on the dark gradients: +-0.5/255 of hash noise,
+// invisible as noise, fatal to bands
+vec3 dither(vec2 uv) {
+  return vec3(hash21(uv * resolution.xy) - 0.5) / 255.0;
+}
+
 // smooth 2D value noise (bilinear-mixed hashes) — wind gusts on the water
 float vnoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -133,7 +139,8 @@ vec3 meteors(vec2 uv, float t, float aspect) {
     if (p < 0.0 || p > 1.0) continue;
     float env = sqrt(sin(3.14159 * p));                    // l. 202
 
-    float theta = (0.20 + 0.35 * h3) * 3.14159;            // l. 182
+    float theta = (0.20 + 0.25 * h3) * 3.14159;            // l. 182, capped ~81deg
+                                                           // (0.55pi gave plumb-line drops)
     float sx = (h2 > 0.5) ? 1.0 : -1.0;
     vec2 start = vec2((0.05 + 0.90 * fract(h1 * 7.31)) * aspect,
                       0.02 + 0.40 * fract(h3 * 5.17));     // l. 188-189
@@ -254,14 +261,17 @@ vec4 scene(vec2 uv, float t) {
              * sin(uv.y * 11.0 - t * 0.9);
     ruv.y += 0.004 * depth * sin(uv.x * 18.0 + uv.y * 26.0 + t * 0.8);
     ruv = clamp(ruv, 0.0, 1.0);
-    // soft vertical blur — real water scatters the reflection; 3 taps,
-    // widening with depth, locally scaled by slow-drifting gusts so patches
-    // of the surface go soft and recover
+    // soft vertical blur — real water scatters the reflection. 5 taps at
+    // tight spacing (sparse wide taps GHOST thin features like the meteor
+    // into double images); slow-drifting gusts scale the spacing mildly so
+    // patches of the surface go soft and recover
     float gust = vnoise(vec2(uv.x * 6.0 - t * 0.18, uv.y * 3.0 + t * 0.06));
-    float blurStep = (0.006 + 0.014 * depth) * (0.55 + 1.5 * gust);
-    vec3 refl = upperScene(ruv, t) * 0.5
-              + upperScene(vec2(ruv.x, clamp(ruv.y - blurStep, 0.0, 1.0)), t) * 0.25
-              + upperScene(vec2(ruv.x, clamp(ruv.y + blurStep, 0.0, 1.0)), t) * 0.25;
+    float s = (0.003 + 0.005 * depth) * (0.7 + 0.6 * gust);
+    vec3 refl = upperScene(ruv, t) * 0.30
+              + upperScene(vec2(ruv.x, clamp(ruv.y - s, 0.0, 1.0)), t) * 0.22
+              + upperScene(vec2(ruv.x, clamp(ruv.y + s, 0.0, 1.0)), t) * 0.22
+              + upperScene(vec2(ruv.x, clamp(ruv.y - 2.0 * s, 0.0, 1.0)), t) * 0.13
+              + upperScene(vec2(ruv.x, clamp(ruv.y + 2.0 * s, 0.0, 1.0)), t) * 0.13;
     // broken shimmer: smoothly drifting phase (1D value noise — a hard
     // floor() step tiles the water into rectangles), long slow waves only;
     // anything near pixel scale aliases into moire
@@ -274,9 +284,9 @@ vec4 scene(vec2 uv, float t) {
     vec3 water = refl * shimmer * (0.62 - 0.34 * depth) + vec3(0.010, 0.018, 0.038);
     // faint bright seam right at the shoreline
     water += vec3(0.05, 0.08, 0.10) * smoothstep(0.015, 0.0, uv.y - waterline);
-    return vec4(clamp(water, 0.0, 1.0), 1.0);
+    return vec4(clamp(water + dither(uv), 0.0, 1.0), 1.0);
   }
-  return vec4(clamp(upperScene(uv, t), 0.0, 1.0), 1.0);
+  return vec4(clamp(upperScene(uv, t) + dither(uv), 0.0, 1.0), 1.0);
 }
 
 void main() {
