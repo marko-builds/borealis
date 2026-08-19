@@ -241,21 +241,26 @@ vec4 scene(vec2 uv, float t) {
     // ripple-displaced sample point: two x frequencies + a slight y wobble,
     // all growing with depth — kills the perfect-mirror geometry
     vec2 ruv = vec2(uv.x, waterline - (uv.y - waterline) * K);
-    ruv.x += (0.004 + 0.012 * depth)
-             * sin(uv.y * 70.0 + t * 1.6)
-             * sin(uv.y * 23.0 - t * 1.0);
-    ruv.y += 0.012 * depth * sin(uv.x * 30.0 + uv.y * 50.0 + t * 0.8);
+    ruv.x += (0.0015 + 0.004 * depth)
+             * sin(uv.y * 34.0 + t * 1.4)
+             * sin(uv.y * 11.0 - t * 0.9);
+    ruv.y += 0.004 * depth * sin(uv.x * 18.0 + uv.y * 26.0 + t * 0.8);
     ruv = clamp(ruv, 0.0, 1.0);
-    vec3 refl = upperScene(ruv, t);
+    // soft vertical blur — real water scatters the reflection; 3 taps,
+    // widening with depth
+    float blurStep = 0.006 + 0.014 * depth;
+    vec3 refl = upperScene(ruv, t) * 0.5
+              + upperScene(vec2(ruv.x, clamp(ruv.y - blurStep, 0.0, 1.0)), t) * 0.25
+              + upperScene(vec2(ruv.x, clamp(ruv.y + blurStep, 0.0, 1.0)), t) * 0.25;
     // broken shimmer: smoothly drifting phase (1D value noise — a hard
     // floor() step tiles the water into rectangles), long slow waves only;
     // anything near pixel scale aliases into moire
     float cx = uv.x * 48.0;
     float ci = floor(cx);
     float cf = fract(cx); cf = cf * cf * (3.0 - 2.0 * cf);
-    float colPhase = 12.0 * mix(hash21(vec2(ci, 0.0)), hash21(vec2(ci + 1.0, 0.0)), cf);
-    float shimmer = 0.80 + 0.20 * sin(uv.y * 55.0 + colPhase + t * 1.8);
-    shimmer *= 0.90 + 0.10 * sin(uv.y * 17.0 - t * 1.1 + colPhase * 0.7);
+    float colPhase = 3.5 * mix(hash21(vec2(ci, 0.0)), hash21(vec2(ci + 1.0, 0.0)), cf);
+    float shimmer = 0.86 + 0.14 * sin(uv.y * 38.0 + colPhase + t * 1.8);
+    shimmer *= 0.94 + 0.06 * sin(uv.y * 9.0 - t * 1.1 + colPhase * 0.7);
     vec3 water = refl * shimmer * (0.62 - 0.34 * depth) + vec3(0.010, 0.018, 0.038);
     // faint bright seam right at the shoreline
     water += vec3(0.05, 0.08, 0.10) * smoothstep(0.015, 0.0, uv.y - waterline);
