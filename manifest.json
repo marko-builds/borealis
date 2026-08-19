@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.marko-builds.borealis",
+  "name": "Borealis",
+  "version": "0.1.0",
+  "author": "Marko Stankovic",
+  "description": "A summoned fullscreen aurora — GPU-procedural scenery, zero assets",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Borealis.qml"
+  }
+}
