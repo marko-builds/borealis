@@ -24,6 +24,11 @@ for deterministic captures).
 - Uniform block: `qt_Matrix` + `qt_Opacity` first, then scalars/vec2/vec4 only —
   matched by name to ShaderEffect properties; arrays are unreliable across the
   property bridge.
+- **Config = the plugin's own entry in `~/.config/omarchy/shell.json`** (the shell
+  injects `shell`; `shell.shellConfig` is reactive, reassigned on file save, so a
+  binding over it applies live while summoned). Env vars can NEVER work here:
+  `omarchy-restart-shell` respawns via `hyprctl dispatch exec` precisely so the
+  shell gets the canonical session env, not the caller's variables.
 
 ## Visual tuning history lives in git log (lookdev commits)
 
