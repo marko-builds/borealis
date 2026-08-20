@@ -20,7 +20,7 @@ omarchy plugin add https://github.com/marko-builds/borealis --enable
 Plugins cannot register keybinds, so bind one yourself in `~/.config/hypr/bindings.conf`:
 
 ```ini
-bindd = SUPER SHIFT, B, Borealis, exec, omarchy-shell shell summon io.github.marko-builds.borealis
+bindd = SUPER ALT, B, Borealis, exec, omarchy-shell shell summon io.github.marko-builds.borealis
 ```
 
 Any key or click dismisses it. While open it is deliberately modal, like a screensaver:
