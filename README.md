@@ -7,7 +7,7 @@ and the water below. The math is ported from my own generative aurora engine.
 Omarchy ships a terminal screensaver. Borealis is the scenery counterpart: a GPU shader
 scene you summon when you step away.
 
-![Borealis running in the Omarchy overlay](demo/borealis.gif)
+![Borealis running in the Omarchy overlay](demo/borealis-demo.gif)
 
 ## Install
 
