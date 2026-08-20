@@ -9,8 +9,10 @@ Item {
   property var manifest: null
   property bool opened: false
 
-  // The single config surface: palette by name, via env or edit here.
-  // BOREALIS_PALETTE = aurora | ember | gold | nord | ice
+  // The single config surface: "palette" on this plugin's entry in
+  // ~/.config/omarchy/shell.json, applied live on save (shellConfig is
+  // reactive):  "plugins": [{ "id": "io.github.marko-builds.borealis",
+  // "palette": "ember" }]  — aurora | ember | gold | nord | ice.
   // 6-stop ramps + sky tints from play/aurora.py PALETTES (0-255).
   readonly property var paletteTable: ({
     aurora: { p: [0.00, 0.12, 0.30, 0.55, 0.80, 1.00],
@@ -30,8 +32,14 @@ Item {
       sb: [6,9,22], sa: [8,14,26] }
   })
   property string palette: {
-    var p = Quickshell.env("BOREALIS_PALETTE")
-    return paletteTable[p] !== undefined ? p : "aurora"
+    var cfg = root.shell && root.shell.shellConfig
+    var plugins = (cfg && cfg.plugins) || []
+    for (var i = 0; i < plugins.length; i++) {
+      var e = plugins[i]
+      if (e && e.id === "io.github.marko-builds.borealis" && paletteTable[e.palette] !== undefined)
+        return e.palette
+    }
+    return "aurora"
   }
   readonly property var pal: paletteTable[palette]
 

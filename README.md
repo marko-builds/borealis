@@ -44,17 +44,16 @@ Five palettes: `aurora`, `ember`, `gold`, `nord`, `ice`.
 |---|---|---|
 | ![gold](demo/palettes/gold.png) | ![nord](demo/palettes/nord.png) | ![ice](demo/palettes/ice.png) |
 
-Try one:
+Set `palette` on the plugin's entry in `~/.config/omarchy/shell.json`. It applies the
+moment you save, even while the aurora is on screen:
 
-```sh
-BOREALIS_PALETTE=nord omarchy restart shell
+```jsonc
+"plugins": [
+  { "id": "io.github.marko-builds.borealis", "palette": "nord" }
+]
 ```
 
-Make it stick across sessions in `~/.config/hypr/envs.conf`:
-
-```ini
-env = BOREALIS_PALETTE,nord
-```
+The entry is already there once the plugin is enabled; you only add the `palette` key.
 
 ## Lean by design
 
