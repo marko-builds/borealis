@@ -1,0 +1,10 @@
+.gitignore
+.publish-allowlist
+Borealis.qml
+CLAUDE.md
+LICENSE
+README.md
+demo
+lookdev
+manifest.json
+shaders
