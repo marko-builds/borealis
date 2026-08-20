@@ -15,6 +15,12 @@ scene you summon when you step away.
 omarchy plugin add https://github.com/marko-builds/borealis --enable
 ```
 
+Remove it the same way:
+
+```sh
+omarchy plugin remove io.github.marko-builds.borealis
+```
+
 ## Summon
 
 Plugins cannot register keybinds, so bind one yourself in `~/.config/hypr/bindings.conf`:
@@ -61,6 +67,7 @@ The entry is already there once the plugin is enabled; you only add the `palette
   dismissed, it sits at 0.0% CPU.
 - Memory resident (`keepLoaded`), so summon is instant. That is the trade, stated.
 - While open it draws about 3% CPU on my machine. The GPU does the painting.
+- No external dependencies. The stock Omarchy Quattro shell is everything it needs.
 
 ## How it works
 
