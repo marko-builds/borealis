@@ -36,8 +36,16 @@ Item {
     var plugins = (cfg && cfg.plugins) || []
     for (var i = 0; i < plugins.length; i++) {
       var e = plugins[i]
-      if (e && e.id === "io.github.marko-builds.borealis" && paletteTable[e.palette] !== undefined)
-        return e.palette
+      // hasOwnProperty, never `paletteTable[k] !== undefined`: every key on
+      // Object.prototype ("__proto__", "constructor", "toString",
+      // "hasOwnProperty", "valueOf") answers a plain lookup, so the loose test
+      // accepts all five and hands `pal` the prototype object, whose ramp is
+      // undefined. Measured in the shipping Qt V4 engine as a TypeError on
+      // every colour uniform.
+      var name = e && e.palette !== undefined ? String(e.palette) : ""
+      if (e && e.id === "io.github.marko-builds.borealis"
+          && Object.prototype.hasOwnProperty.call(paletteTable, name))
+        return name
     }
     return "aurora"
   }
