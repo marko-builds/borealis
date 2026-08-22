@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "io.github.marko-builds.borealis",
   "name": "Borealis",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Marko Stankovic",
-  "description": "A summoned fullscreen aurora — GPU-procedural scenery, zero assets",
+  "description": "A summoned fullscreen aurora — GPU-procedural scenery with an optional synthesized aurora pad",
   "kinds": [
     "overlay"
   ],

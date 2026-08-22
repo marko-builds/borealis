@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
 
@@ -51,6 +52,89 @@ Item {
   }
   readonly property var pal: paletteTable[palette]
 
+  // v0.2 ambience: a synthesized aurora pad (play/ambient_synth.py, seamless by
+  // construction, -14 LUFS) fades in on summon and ramps out on dismiss.
+  // Config on the same shell.json entry: "ambience": true turns it on (default off),
+  // "ambienceVolume": 0-100 sets the level (default 40), both live.
+  readonly property var pluginEntry: {
+    var cfg = root.shell && root.shell.shellConfig
+    var plugins = (cfg && cfg.plugins) || []
+    for (var i = 0; i < plugins.length; i++) {
+      var e = plugins[i]
+      if (e && e.id === "io.github.marko-builds.borealis") return e
+    }
+    return null
+  }
+  // Default OFF: Borealis has an installed base; no surprise audio in an update.
+  readonly property bool ambience: !!(pluginEntry && pluginEntry.ambience === true)
+  readonly property int ambienceVolume: {
+    var v = pluginEntry ? Number(pluginEntry.ambienceVolume) : NaN
+    return isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : 40
+  }
+  onAmbienceVolumeChanged: if (bed.running) restore.running = true
+
+  // The bed outlives `opened` by one ramp: the overlay closes at once, the
+  // audio Process stops when the ramp reports done (or at once if no ramp ran).
+  property bool audioOn: false
+  readonly property string audioClient: "io.github.marko-builds.borealis"
+  // Sink-input index by application.name; index() not a regex, so the dots in
+  // the id are literal. Empty when the stream is not (yet) registered.
+  readonly property string findIdx:
+    "pactl list sink-inputs | awk -v app='application.name = \"" + audioClient + "\"' "
+    + "'/Sink Input #/ { i=$0; sub(/.*#/, \"\", i) } index($0, app) && !f { f=i } END { print f }'"
+
+  Process {
+    id: bed
+    running: root.audioOn && root.ambience
+    command: [
+      "mpv", "--no-video", "--loop-file=inf", "--load-scripts=no",
+      "--audio-client-name=" + root.audioClient,
+      "--volume=100", "--af=afade=t=in:d=2",
+      Qt.resolvedUrl("audio/bed-aurora.ogg").toString()
+    ]
+    // --load-scripts=no: Omarchy ships mpv-mpris; a bare mpv would take the
+    // media keys. Level lives on the PipeWire stream, not in mpv, so config
+    // changes and the dismiss ramp use the same lever.
+    onStarted: restore.running = true
+  }
+
+  // WirePlumber restores a stream's last volume by application.name, so the
+  // 0% the ramp leaves would silence the NEXT summon. Poll for the sink-input
+  // (up to 3 s) and set it to the configured level.
+  Process {
+    id: restore
+    command: ["sh", "-c",
+      "for n in $(seq 1 30); do idx=$(" + root.findIdx + "); [ -n \"$idx\" ] && break; sleep 0.1; done\n"
+      + "[ -z \"$idx\" ] && exit 0\n"
+      + "pactl set-sink-input-volume \"$idx\" " + root.ambienceVolume + "%"]
+  }
+
+  // Dismiss: -6% per 40 ms on the sink-input (pactl get-sink-input-volume does
+  // not exist; do not read back with it), then let the Process stop. If the
+  // stream is gone already, stop at once.
+  Process {
+    id: ramp
+    command: ["sh", "-c",
+      "idx=$(" + root.findIdx + ")\n"
+      + "[ -z \"$idx\" ] && exit 0\n"
+      + "for n in $(seq 1 16); do pactl set-sink-input-volume \"$idx\" -6% 2>/dev/null || break; sleep 0.04; done"]
+    onExited: {
+      if (root.opened) restore.running = true   // re-summoned mid-ramp: bring it back
+      else root.audioOn = false
+    }
+  }
+  function stopAudio() {
+    if (!bed.running) { root.audioOn = false; return }
+    if (!ramp.running) ramp.running = true
+  }
+
+  // Test handles for selftest.qml: read-only aliases, no behaviour of their own.
+  readonly property alias sceneItem: scene
+  readonly property alias clickArea: clickArea
+  readonly property alias panelVisible: panel.visible
+  readonly property alias bedRunning: bed.running
+  readonly property alias rampRunning: ramp.running
+
   // ramp stop i as vec4: rgb (0-1) + stop position in w
   function stopVec(i) {
     return Qt.vector4d(pal.c[i][0] / 255, pal.c[i][1] / 255, pal.c[i][2] / 255, pal.p[i])
@@ -58,15 +142,18 @@ Item {
 
   function open(payloadJson) {
     root.opened = true
+    root.audioOn = true
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
   function close() {
     root.opened = false
+    root.stopAudio()
   }
 
   function dismiss() {
     root.opened = false
+    root.stopAudio()
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "io.github.marko-builds.borealis")
   }
@@ -114,6 +201,7 @@ Item {
     }
 
     MouseArea {
+      id: clickArea
       anchors.fill: parent
       onClicked: root.dismiss()
     }

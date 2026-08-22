@@ -5,7 +5,10 @@ CLAUDE.md
 LICENSE
 README.md
 demo
+audio
 lookdev
 manifest.json
 shaders
 preview.png
+selftest.qml
+selftest.sh
