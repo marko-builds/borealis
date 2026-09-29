@@ -1,8 +1,9 @@
 # Borealis
 
-A summoned fullscreen aurora for Omarchy. 100% procedural, zero assets: one fragment
-shader draws the curtains, the stars, the meteors, a crescent moon, a forested ridge,
-and the water below. The math is ported from my own generative aurora engine.
+A summoned fullscreen aurora for Omarchy. One fragment shader draws the curtains, the
+stars, the meteors, a crescent moon, a forested ridge, and the water below. The math is
+ported from my own generative aurora engine. Since 0.2 it can play a synthesized aurora
+pad under the scene, off by default: no recordings, one small ogg rendered from code.
 
 Omarchy ships a terminal screensaver. Borealis is the scenery counterpart: a GPU shader
 scene you summon when you step away.
@@ -61,13 +62,29 @@ moment you save, even while the aurora is on screen:
 
 The entry is already there once the plugin is enabled; you only add the `palette` key.
 
+## Aurora sound
+
+Off by default. Borealis already had users when this landed, and an update should not
+start making noise on its own. Turn it on with `ambience` on the same `shell.json` entry:
+
+```jsonc
+"plugins": [
+  { "id": "io.github.marko-builds.borealis", "palette": "ember", "ambience": true, "ambienceVolume": 40 }
+]
+```
+
+The pad fades in when you summon and ramps out when you dismiss. It loops without a
+seam and sits at -14 LUFS, so it stays under whatever else is playing. `ambienceVolume`
+is 0 to 100, default 40, and it sets the PipeWire stream level, so your mixer sees one
+stream named after the plugin. Both keys apply live. Needs `mpv`, which Omarchy ships.
+
 ## Lean by design
 
 - Zero work while dismissed. The animation clock is gated on the overlay being open;
   dismissed, it sits at 0.0% CPU.
 - Memory resident (`keepLoaded`), so summon is instant. That is the trade, stated.
 - While open it draws about 3% CPU on my machine. The GPU does the painting.
-- No external dependencies. The stock Omarchy Quattro shell is everything it needs.
+- No external dependencies beyond the stock Omarchy Quattro shell and its `mpv`.
 
 ## How it works
 
@@ -81,6 +98,23 @@ binding, not a shader rebuild.
 `lookdev/index.html` is a browser twin of the shader for fast iteration: keys 1 to 5
 switch palettes, `m`/`s`/`w`/`c` toggle extras, and `?t=120&freeze=1` pins the clock
 for deterministic captures. The palette stills above come from it.
+
+## Dev harness
+
+`selftest.qml` summons the overlay beside the live shell and checks the whole contract:
+the shader paints (a blank shader is the silent failure), the aurora moves, all five
+palettes switch live while summoned, prototype keys in the config fall back to aurora, a
+real key press dismisses, focus returns to the window that had it, a plain summon starts
+no audio stream, `ambience: true` starts exactly one and dismiss removes it, and the
+dismissed overlay sits at 0.0% CPU. `selftest.sh` wraps it with `omarchy plugin
+validate`, `qmllint`, and an offline frame check, and refuses a verdict if the shell
+restarted during the run.
+
+```sh
+./selftest.sh
+```
+
+Grabs and the log land under `$XDG_RUNTIME_DIR/borealis-selftest/`. Needs `wtype`.
 
 ## License
 
